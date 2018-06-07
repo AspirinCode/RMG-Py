@@ -206,32 +206,32 @@ cdef class LiquidReactor(ReactionSystem):
 
         """
         Return the residual function for the governing DAE system for the
-        liquid reaction system.
+        simple reaction system.
         """
         cdef numpy.ndarray[numpy.int_t, ndim=2] ir, ip, inet
         cdef numpy.ndarray[numpy.float64_t, ndim=1] res, kf, kr, knet, delta, equilibriumConstants
-        cdef int numCoreSpecies, numCoreReactions, numEdgeSpecies, numEdgeReactions, numPdepNetworks
+        cdef int numCoreSpecies, numCoreReactions
         cdef int i, j, z, first, second, third
-        cdef double k, V, reactionRate
-        cdef numpy.ndarray[numpy.float64_t, ndim=1] coreSpeciesConcentrations, coreSpeciesRates, coreReactionRates, edgeSpeciesRates, edgeReactionRates, networkLeakRates, coreSpeciesConsumptionRates, coreSpeciesProductionRates
-        cdef numpy.ndarray[numpy.float64_t, ndim=1] C
-        cdef numpy.ndarray[numpy.float64_t, ndim=2] jacobian, dgdk
+        cdef double k, V, reactionRate, revReactionRate, T, P, Peff
+        cdef numpy.ndarray[numpy.float64_t, ndim=1] coreSpeciesRates
+        cdef numpy.ndarray[numpy.float64_t, ndim=1] C, y_coreSpecies
+        cdef numpy.ndarray[numpy.float64_t, ndim=2] jacobian, dgdk, colliderEfficiencies
+        cdef numpy.ndarray[numpy.int_t, ndim=1] pdepColliderReactionIndices, pdepSpecificColliderReactionIndices
+        cdef list pdepColliderKinetics, pdepSpecificColliderKinetics
 
         ir = self.reactantIndices
         ip = self.productIndices
-        equilibriumConstants = self.Keq
+        
+        numCoreSpecies = len(self.coreSpeciesRates)
+        numCoreReactions = len(self.coreReactionRates)
 
         kf = self.kf
         kr = self.kb
         
+        y_coreSpecies = y[:numCoreSpecies]
+            
         inet = self.networkIndices
         knet = self.networkLeakCoefficients
-
-        numCoreSpecies = len(self.coreSpeciesRates)
-        numCoreReactions = len(self.coreReactionRates)
-        numEdgeSpecies = len(self.edgeSpeciesRates)
-        numEdgeReactions = len(self.edgeReactionRates)
-        numPdepNetworks = len(self.networkLeakRates)
         
         
         res = numpy.zeros(numCoreSpecies, numpy.float64)
@@ -239,21 +239,17 @@ cdef class LiquidReactor(ReactionSystem):
         coreSpeciesConcentrations = numpy.zeros_like(self.coreSpeciesConcentrations)
         coreSpeciesRates = numpy.zeros_like(self.coreSpeciesRates)
         coreReactionRates = numpy.zeros_like(self.coreReactionRates)
-        coreSpeciesConsumptionRates = numpy.zeros_like(self.coreSpeciesConsumptionRates)
-        coreSpeciesProductionRates = numpy.zeros_like(self.coreSpeciesProductionRates)
-        edgeSpeciesRates = numpy.zeros_like(self.edgeSpeciesRates)
-        edgeReactionRates = numpy.zeros_like(self.edgeReactionRates)
-        networkLeakRates = numpy.zeros_like(self.networkLeakRates)
-        
 
         C = numpy.zeros_like(self.coreSpeciesConcentrations)
-        V =  self.V # constant volume reactor
-
+        
+        # Volume is constant
+        V = self.V
+        
+        self.y = y
         for j in xrange(numCoreSpecies):
             C[j] = y[j] / V
-            coreSpeciesConcentrations[j] = C[j]
         
-        for j in xrange(ir.shape[0]):
+        for j in xrange(numCoreReactions):
             k = kf[j]
             if ir[j,0] >= numCoreSpecies or ir[j,1] >= numCoreSpecies or ir[j,2] >= numCoreSpecies:
                 fReactionRate = 0.0
@@ -276,92 +272,39 @@ cdef class LiquidReactor(ReactionSystem):
             reactionRate = fReactionRate-revReactionRate
             
             # Set the reaction and species rates
-            if j < numCoreReactions:
-                # The reaction is a core reaction
-                coreReactionRates[j] = reactionRate
 
-                # Add/substract the total reaction rate from each species rate
-                # Since it's a core reaction we know that all of its reactants
-                # and products are core species
-                first = ir[j,0]
-                coreSpeciesRates[first] -= reactionRate
-                coreSpeciesConsumptionRates[first] += fReactionRate
-                coreSpeciesProductionRates[first] += revReactionRate
-                second = ir[j,1]
-                if second != -1:
-                    coreSpeciesRates[second] -= reactionRate
-                    coreSpeciesConsumptionRates[second] += fReactionRate
-                    coreSpeciesProductionRates[second] += revReactionRate
-                    third = ir[j,2]
-                    if third != -1:
-                        coreSpeciesRates[third] -= reactionRate
-                        coreSpeciesConsumptionRates[third] += fReactionRate
-                        coreSpeciesProductionRates[third] += revReactionRate
-                first = ip[j,0]
-                coreSpeciesRates[first] += reactionRate
-                coreSpeciesProductionRates[first] += fReactionRate
-                coreSpeciesConsumptionRates[first] += revReactionRate
-                second = ip[j,1]
-                if second != -1:
-                    coreSpeciesRates[second] += reactionRate
-                    coreSpeciesProductionRates[second] += fReactionRate
-                    coreSpeciesConsumptionRates[second] += revReactionRate
-                    third = ip[j,2]
-                    if third != -1:
-                        coreSpeciesRates[third] += reactionRate
-                        coreSpeciesProductionRates[third] += fReactionRate
-                        coreSpeciesConsumptionRates[third] += revReactionRate
+            # The reaction is a core reaction
+            coreReactionRates[j] = reactionRate
 
-            else:
-                # The reaction is an edge reaction
-                edgeReactionRates[j-numCoreReactions] = reactionRate
-
-                # Add/substract the total reaction rate from each species rate
-                # Since it's an edge reaction its reactants and products could
-                # be either core or edge species
-                # We're only interested in the edge species
-                first = ir[j,0]
-                if first >= numCoreSpecies: edgeSpeciesRates[first-numCoreSpecies] -= reactionRate
-                second = ir[j,1]
-                if second != -1:
-                    if second >= numCoreSpecies: edgeSpeciesRates[second-numCoreSpecies] -= reactionRate
-                    third = ir[j,2]
-                    if third != -1:
-                        if third >= numCoreSpecies: edgeSpeciesRates[third-numCoreSpecies] -= reactionRate
-                first = ip[j,0]
-                if first >= numCoreSpecies: edgeSpeciesRates[first-numCoreSpecies] += reactionRate
-                second = ip[j,1]
-                if second != -1:
-                    if second >= numCoreSpecies: edgeSpeciesRates[second-numCoreSpecies] += reactionRate
-                    third = ip[j,2]
-                    if third != -1:
-                        if third >= numCoreSpecies: edgeSpeciesRates[third-numCoreSpecies] += reactionRate
-
-        for j in xrange(inet.shape[0]):
-            k = knet[j]
-            if inet[j,1] == -1: # only one reactant
-                reactionRate = k * C[inet[j,0]]
-            elif inet[j,2] == -1: # only two reactants
-                reactionRate = k * C[inet[j,0]] * C[inet[j,1]]
-            else: # three reactants!! (really?)
-                reactionRate = k * C[inet[j,0]] * C[inet[j,1]] * C[inet[j,2]]
-            networkLeakRates[j] = reactionRate
-
-
-        #chatelak: Same as in Java, coreSpecies rate = 0 if declared as constatn 
+            # Add/substract the total reaction rate from each species rate
+            # Since it's a core reaction we know that all of its reactants
+            # and products are core species
+            first = ir[j,0]
+            coreSpeciesRates[first] -= reactionRate
+            second = ir[j,1]
+            if second != -1:
+                coreSpeciesRates[second] -= reactionRate
+                third = ir[j,2]
+                if third != -1:
+                    coreSpeciesRates[third] -= reactionRate
+            first = ip[j,0]
+            coreSpeciesRates[first] += reactionRate
+            second = ip[j,1]
+            if second != -1:
+                coreSpeciesRates[second] += reactionRate
+                third = ip[j,2]
+                if third != -1:
+                    coreSpeciesRates[third] += reactionRate
+        
+        #chatelak: Same as in Java, coreSpecies rate = 0 if declared as constant
         if self.constSPCIndices is not None:
             for spcIndice in self.constSPCIndices:
                 coreSpeciesRates[spcIndice] = 0
-
-
-        self.coreSpeciesConcentrations = coreSpeciesConcentrations
+                
+        self.coreSpeciesConcentrations = C
         self.coreSpeciesRates = coreSpeciesRates
         self.coreReactionRates = coreReactionRates
-        self.coreSpeciesProductionRates = coreSpeciesProductionRates
-        self.coreSpeciesConsumptionRates = coreSpeciesConsumptionRates
-        self.edgeSpeciesRates = edgeSpeciesRates
-        self.edgeReactionRates = edgeReactionRates
-        self.networkLeakRates = networkLeakRates
+
 
         res = coreSpeciesRates * V 
         
@@ -386,6 +329,115 @@ cdef class LiquidReactor(ReactionSystem):
         
         # Return DELTA, IRES.  IRES is set to 1 in order to tell DASPK to evaluate the sensitivity residuals
         return delta, 1
+    
+    @cython.boundscheck(False)
+    def generateEdgeInfo(self, double t, numpy.ndarray[numpy.float64_t, ndim=1] y):
+
+        """
+        Return the residual function for the governing DAE system for the
+        simple reaction system.
+        """
+        cdef numpy.ndarray[numpy.int_t, ndim=2] ir, ip, inet
+        cdef numpy.ndarray[numpy.float64_t, ndim=1] res, kf, kr, knet, delta, equilibriumConstants
+        cdef int numCoreSpecies, numCoreReactions, numEdgeSpecies, numEdgeReactions, numPdepNetworks
+        cdef int i, j, z, first, second, third
+        cdef double k, V, reactionRate, revReactionRate, T, P, Peff
+        cdef numpy.ndarray[numpy.float64_t, ndim=1] coreSpeciesConcentrations, coreSpeciesRates, coreReactionRates, edgeSpeciesRates, edgeReactionRates, networkLeakRates, coreSpeciesConsumptionRates, coreSpeciesProductionRates
+        cdef numpy.ndarray[numpy.float64_t, ndim=1] C, y_coreSpecies
+        cdef numpy.ndarray[numpy.float64_t, ndim=2] jacobian, dgdk, colliderEfficiencies
+        cdef numpy.ndarray[numpy.int_t, ndim=1] pdepColliderReactionIndices, pdepSpecificColliderReactionIndices
+        cdef list pdepColliderKinetics, pdepSpecificColliderKinetics
+
+        ir = self.reactantIndices
+        ip = self.productIndices
+        
+        numCoreSpecies = len(self.coreSpeciesRates)
+        numCoreReactions = len(self.coreReactionRates)
+        numEdgeSpecies = len(self.edgeSpeciesRates)
+        numEdgeReactions = len(self.edgeReactionRates)
+        numPdepNetworks = len(self.networkLeakRates)
+        kf = self.kf
+        kr = self.kb
+        
+        y_coreSpecies = y[:numCoreSpecies]
+        
+            
+        inet = self.networkIndices
+        knet = self.networkLeakCoefficients
+        
+        
+        edgeSpeciesRates = numpy.zeros_like(self.edgeSpeciesRates)
+        edgeReactionRates = numpy.zeros_like(self.edgeReactionRates)
+        networkLeakRates = numpy.zeros_like(self.networkLeakRates)
+
+        
+        # Constant Volume
+        V = self.V
+
+
+        C = self.coreSpeciesConcentrations
+        
+        for j in xrange(numCoreReactions,ir.shape[0]):
+            k = kf[j]
+            if ir[j,0] >= numCoreSpecies or ir[j,1] >= numCoreSpecies or ir[j,2] >= numCoreSpecies:
+                fReactionRate = 0.0
+            elif ir[j,1] == -1: # only one reactant
+                fReactionRate = k * C[ir[j,0]]
+            elif ir[j,2] == -1: # only two reactants
+                fReactionRate = k * C[ir[j,0]] * C[ir[j,1]]
+            else: # three reactants!! (really?)
+                fReactionRate = k * C[ir[j,0]] * C[ir[j,1]] * C[ir[j,2]]
+            k = kr[j]
+            if ip[j,0] >= numCoreSpecies or ip[j,1] >= numCoreSpecies or ip[j,2] >= numCoreSpecies:
+                revReactionRate = 0.0
+            elif ip[j,1] == -1: # only one reactant
+                revReactionRate = k * C[ip[j,0]]
+            elif ip[j,2] == -1: # only two reactants
+                revReactionRate = k * C[ip[j,0]] * C[ip[j,1]]
+            else: # three reactants!! (really?)
+                revReactionRate = k * C[ip[j,0]] * C[ip[j,1]] * C[ip[j,2]]
+                
+            reactionRate = fReactionRate-revReactionRate
+            
+
+            edgeReactionRates[j-numCoreReactions] = reactionRate
+
+            # Add/substract the total reaction rate from each species rate
+            # Since it's an edge reaction its reactants and products could
+            # be either core or edge species
+            # We're only interested in the edge species
+            first = ir[j,0]
+            if first >= numCoreSpecies: edgeSpeciesRates[first-numCoreSpecies] -= reactionRate
+            second = ir[j,1]
+            if second != -1:
+                if second >= numCoreSpecies: edgeSpeciesRates[second-numCoreSpecies] -= reactionRate
+                third = ir[j,2]
+                if third != -1:
+                    if third >= numCoreSpecies: edgeSpeciesRates[third-numCoreSpecies] -= reactionRate
+            first = ip[j,0]
+            if first >= numCoreSpecies: edgeSpeciesRates[first-numCoreSpecies] += reactionRate
+            second = ip[j,1]
+            if second != -1:
+                if second >= numCoreSpecies: edgeSpeciesRates[second-numCoreSpecies] += reactionRate
+                third = ip[j,2]
+                if third != -1:
+                    if third >= numCoreSpecies: edgeSpeciesRates[third-numCoreSpecies] += reactionRate
+
+        for j in xrange(inet.shape[0]):
+            k = knet[j]
+            if inet[j,1] == -1: # only one reactant
+                reactionRate = k * C[inet[j,0]]
+            elif inet[j,2] == -1: # only two reactants
+                reactionRate = k * C[inet[j,0]] * C[inet[j,1]]
+            else: # three reactants!! (really?)
+                reactionRate = k * C[inet[j,0]] * C[inet[j,1]] * C[inet[j,2]]
+            networkLeakRates[j] = reactionRate
+
+        self.edgeSpeciesRates = edgeSpeciesRates
+        self.edgeReactionRates = edgeReactionRates
+        self.networkLeakRates = networkLeakRates
+
+        return
 
     @cython.boundscheck(False)
     def jacobian(self, double t, numpy.ndarray[numpy.float64_t, ndim=1] y, numpy.ndarray[numpy.float64_t, ndim=1] dydt, double cj, numpy.ndarray[numpy.float64_t, ndim=1] senpar = numpy.zeros(1, numpy.float64)):
