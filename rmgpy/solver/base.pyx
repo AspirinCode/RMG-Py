@@ -591,7 +591,7 @@ cdef class ReactionSystem(DASx):
         cdef numpy.ndarray[numpy.float64_t, ndim=1] maxCoreSpeciesRates, maxEdgeSpeciesRates, maxNetworkLeakRates,maxEdgeSpeciesRateRatios, maxNetworkLeakRateRatios
         cdef bint terminated
         cdef object maxSpecies, maxNetwork
-        cdef int i, j, k
+        cdef int i, j, k, edgeCheckIter, iterNum
         cdef numpy.float64_t maxSurfaceDifLnAccumNum, maxSurfaceSpeciesRate, conversion
         cdef int maxSurfaceAccumReactionIndex, maxSurfaceSpeciesIndex
         cdef object maxSurfaceAccumReaction, maxSurfaceSpecies
@@ -602,7 +602,7 @@ cdef class ReactionSystem(DASx):
         cdef double unimolecularThresholdVal, bimolecularThresholdVal, trimolecularThresholdVal
         cdef bool useDynamicsTemp, firstTime, useDynamics, terminateAtMaxObjects, schanged
         cdef numpy.ndarray[numpy.float64_t, ndim=1] edgeReactionRates
-        cdef double reactionRate, production, consumption
+        cdef double reactionRate, production, consumption, final_time
         cdef numpy.ndarray[numpy.int_t,ndim=1] surfaceSpeciesIndices, surfaceReactionIndices
         # cython declations for sensitivity analysis
         cdef numpy.ndarray[numpy.int_t, ndim=1] sensSpeciesIndices
@@ -685,6 +685,12 @@ cdef class ReactionSystem(DASx):
         bimolecularThreshold = self.bimolecularThreshold
         trimolecularThreshold = self.trimolecularThreshold
         
+        final_time = 0.0
+        for term in self.termination:
+            if isinstance(term,TerminationTime):
+                if term.time.value_si > final_time:
+                    final_time = term.time.value_si
+                    
         # Copy the initial conditions to use in evaluating conversions
         y0 = self.y.copy()
         
@@ -703,6 +709,8 @@ cdef class ReactionSystem(DASx):
         prevTime = self.t
 
         firstTime = True
+        edgeCheckIter = int(1.0/modelSettings.edgeCheckFrequency)
+        iterNum = edgeCheckIter
         
         while not terminated:
             # Integrate forward in time by one time step
@@ -710,10 +718,20 @@ cdef class ReactionSystem(DASx):
             if not firstTime:
                 try:
                     self.step(stepTime)
+                    if iterNum == edgeCheckIter or (final_time != 0.0 and self.t >= final_time): 
+                        self.generateEdgeInfo(self.t, self.y)
+                        iterNum = 0
+                    else:
+                        iterNum += 1
+                        if self.t >= 0.9999 * stepTime:
+                            stepTime *= 10.0
+                        continue
                 except DASxError as e:
                     logging.error("Trying to step from time {} to {} resulted in a solver (DASPK) error".format(prevTime, stepTime))
                     
                     logging.info('Resurrecting Model...')
+                    
+                    self.generateEdgeInfo(self.t, self.y)
                     
                     conversion = 0.0
                     for term in self.termination:
@@ -752,7 +770,9 @@ cdef class ReactionSystem(DASx):
                         logging.error("Edge species net rates: {!r}".format(self.edgeSpeciesRates))
                         logging.error("Network leak rates: {!r}".format(self.networkLeakRates))
                         raise ValueError('invalidObjects could not be filled during resurrection process')
-            
+            else:
+                self.generateEdgeInfo(self.t,self.y)
+                
             y_coreSpecies = self.y[:numCoreSpecies]
             totalMoles = numpy.sum(y_coreSpecies)
             if sensitivity:
