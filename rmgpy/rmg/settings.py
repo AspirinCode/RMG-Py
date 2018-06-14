@@ -53,6 +53,7 @@ This module contains settings classes for manipulation of RMG run parameters
     `maxNumSpecies`                                 Number of core species at which a stage/job will terminate
     `maxNumObjPerIter`                              Maximum number of objects that can be sent for enlargement from a single simulation
     `edgeCheckFrequency`                            Fraction of solver time steps at which the edge reaction rates will be calculated and checked
+    `filterLagIndex`                                Index that defines how much the filter lags behind the 
 ==================================================================================================================================================
 """
 import numpy
@@ -66,7 +67,8 @@ class ModelSettings(object):
           toleranceMoveEdgeReactionToSurface=numpy.inf, toleranceMoveSurfaceSpeciesToCore=numpy.inf, toleranceMoveSurfaceReactionToCore=numpy.inf,
           toleranceMoveEdgeReactionToSurfaceInterrupt=None,toleranceMoveEdgeReactionToCoreInterrupt=None, maximumEdgeSpecies=1000000, minCoreSizeForPrune=50, 
           minSpeciesExistIterationsForPrune=2, filterReactions=False, filterThreshold=1e8, ignoreOverallFluxCriterion=False, maxNumSpecies=None, maxNumObjsPerIter=1,
-          terminateAtMaxObjects=False,toleranceThermoKeepSpeciesInEdge=numpy.inf,dynamicsTimeScale = Quantity((0.0,'sec')), edgeCheckFrequency=1.0):
+          terminateAtMaxObjects=False,toleranceThermoKeepSpeciesInEdge=numpy.inf,dynamicsTimeScale = Quantity((0.0,'sec')), edgeCheckFrequency=1.0,
+          filterLagIndex=1.0):
         
         self.fluxToleranceKeepInEdge = toleranceKeepInEdge
         self.fluxToleranceMoveToCore = toleranceMoveToCore
@@ -85,6 +87,7 @@ class ModelSettings(object):
         self.terminateAtMaxObjects = terminateAtMaxObjects
         self.dynamicsTimeScale = dynamicsTimeScale.value_si
         self.edgeCheckFrequency = edgeCheckFrequency
+        self.filterLagIndex = filterLagIndex
         
         if toleranceInterruptSimulation:
             self.fluxToleranceInterrupt = toleranceInterruptSimulation
