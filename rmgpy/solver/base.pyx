@@ -578,7 +578,7 @@ cdef class ReactionSystem(DASx):
         cdef double toleranceMoveEdgeReactionToCoreInterrupt,toleranceMoveEdgeReactionToSurface
         cdef double toleranceMoveSurfaceSpeciesToCore,toleranceMoveSurfaceReactionToCore
         cdef double toleranceMoveEdgeReactionToSurfaceInterrupt
-        cdef bool ignoreOverallFluxCriterion, filterReactions
+        cdef bool ignoreOverallFluxCriterion, filterReactions, filter_resolved, resolve_filter, pre
         cdef double absoluteTolerance, relativeTolerance, sensitivityAbsoluteTolerance, sensitivityRelativeTolerance
         cdef dict speciesIndex
         cdef list row, tempSurfaceObjects
@@ -591,23 +591,26 @@ cdef class ReactionSystem(DASx):
         cdef numpy.ndarray[numpy.float64_t, ndim=1] maxCoreSpeciesRates, maxEdgeSpeciesRates, maxNetworkLeakRates,maxEdgeSpeciesRateRatios, maxNetworkLeakRateRatios
         cdef bint terminated
         cdef object maxSpecies, maxNetwork
-        cdef int i, j, k, edgeCheckIter, iterNum
+        cdef int i, j, k, edgeCheckIter, iterNum, filter_ind
         cdef numpy.float64_t maxSurfaceDifLnAccumNum, maxSurfaceSpeciesRate, conversion
         cdef int maxSurfaceAccumReactionIndex, maxSurfaceSpeciesIndex
         cdef object maxSurfaceAccumReaction, maxSurfaceSpecies
         cdef numpy.ndarray[numpy.float64_t,ndim=1] surfaceSpeciesProduction, surfaceSpeciesConsumption
         cdef numpy.ndarray[numpy.float64_t,ndim=1] surfaceTotalDivAccumNums, surfaceSpeciesRateRatios
         cdef numpy.ndarray[numpy.float64_t, ndim=1] forwardRateCoefficients, coreSpeciesConcentrations
-        cdef double prevTime, totalMoles, c, volume, RTP, maxCharRate
+        cdef double prevTime, totalMoles, c, volume, RTP, maxCharRate, RR0
         cdef double unimolecularThresholdVal, bimolecularThresholdVal, trimolecularThresholdVal
         cdef bool useDynamicsTemp, firstTime, useDynamics, terminateAtMaxObjects, schanged
         cdef numpy.ndarray[numpy.float64_t, ndim=1] edgeReactionRates
-        cdef double reactionRate, production, consumption, final_time
+        cdef double reactionRate, production, consumption, final_time, max_RR_t
         cdef numpy.ndarray[numpy.int_t,ndim=1] surfaceSpeciesIndices, surfaceReactionIndices
         # cython declations for sensitivity analysis
         cdef numpy.ndarray[numpy.int_t, ndim=1] sensSpeciesIndices
         cdef numpy.ndarray[numpy.float64_t, ndim=1] moleSens, dVdk, normSens
-        cdef list time_array, normSens_array, newSurfaceReactions, newSurfaceReactionInds, newObjects, newObjectInds
+        cdef list time_array, normSens_array, newSurfaceReactions, newSurfaceReactionInds, newObjects, newObjectInds, filter_packets, filter_times, filter_conversions, filter_RRs
+        cdef double ftime, fRRpre, fRRpost, RRt, time
+        cdef int RR_ind
+        cdef list term_conversions, term_time, term_RR, fconv
         
         zeroProduction = False
         zeroConsumption = False
@@ -639,6 +642,10 @@ cdef class ReactionSystem(DASx):
         sensitivityRelativeTolerance = simulatorSettings.sens_rtol
         filterReactions = modelSettings.filterReactions
         maxNumObjsPerIter = modelSettings.maxNumObjsPerIter
+        filterLagIndex = modelSettings.filterLagIndex
+        filterRRPreMaxLagIndex = modelSettings.filterRRPreMaxLagIndex
+        filterRRPostMaxLagIndex = modelSettings.filterRRPostMaxLagIndex
+        toleranceFilterInterrupt = modelSettings.toleranceFilterInterrupt
 
         #if not pruning always terminate at max objects, otherwise only do so if terminateAtMaxObjects=True
         terminateAtMaxObjects = True if not prune else modelSettings.terminateAtMaxObjects 
@@ -677,6 +684,15 @@ cdef class ReactionSystem(DASx):
         iteration = 0
         conversion = 0.0
         maxCharRate = 0.0
+        
+        max_RR_t = 0.0
+        filter_times = []
+        filter_conversions = []
+        filter_RRs = []
+        filter_packets = []
+        filter_resolved = False
+        resolve_filter = False
+        
         
         maxEdgeSpeciesRateRatios = self.maxEdgeSpeciesRateRatios
         maxNetworkLeakRateRatios = self.maxNetworkLeakRateRatios
@@ -802,8 +818,12 @@ cdef class ReactionSystem(DASx):
             # Get the characteristic flux
             charRate = sqrt(numpy.sum(self.coreSpeciesRates * self.coreSpeciesRates))
             
+            if firstTime:
+                RR0 = charRate
+                
             if charRate > maxCharRate:
                 maxCharRate = charRate
+                max_RR_t = self.t
                 
             coreSpeciesRates = numpy.abs(self.coreSpeciesRates)
             edgeReactionRates = self.edgeReactionRates
@@ -939,8 +959,17 @@ cdef class ReactionSystem(DASx):
                     surfaceSpecies,surfaceReactions = self.initialize_surface(coreSpecies,coreReactions,surfaceSpecies,surfaceReactions)
                     logging.info('Surface now has {0} Species and {1} Reactions'.format(len(self.surfaceSpeciesIndices),len(self.surfaceReactionIndices)))
                     
-            if filterReactions:
+            if filterReactions and not filter_resolved:
                 # Calculate thresholds for reactions
+                filter_times.append(self.t)
+                filter_conversions.append([])
+                for term in self.termination:
+                    if isinstance(term, TerminationConversion):
+                        filter_ind = self.speciesIndex(term.species)
+                        filter_conversions[-1].append(1.0-self.y[filter_ind]/self.y0[filter_ind])
+                    elif isinstance(term, TerminationRateRatio):
+                        filter_RRs.append(charRate)
+
                 (unimolecularThresholdRateConstant,
                  bimolecularThresholdRateConstant,
                  trimolecularThresholdRateConstant) = self.get_threshold_rate_constants(modelSettings)
@@ -952,11 +981,15 @@ cdef class ReactionSystem(DASx):
                         # Check if core species concentration has gone above threshold for unimolecular reaction
                         if coreSpeciesConcentrations[i] > unimolecularThresholdVal:
                             unimolecularThreshold[i] = True
+                            filter_packets.append(((i,),len(filter_times)-1))
+                            
                 for i in xrange(numCoreSpecies):
                     for j in xrange(i, numCoreSpecies):
                         if not bimolecularThreshold[i,j]:
                             if coreSpeciesConcentrations[i]*coreSpeciesConcentrations[j] > bimolecularThresholdVal:
                                 bimolecularThreshold[i,j] = True
+                                filter_packets.append(((i,j),len(filter_times)-1))
+                                
                 if self.trimolecular:
                     for i in xrange(numCoreSpecies):
                         for j in xrange(i, numCoreSpecies):
@@ -967,7 +1000,7 @@ cdef class ReactionSystem(DASx):
                                         coreSpeciesConcentrations[k]
                                             > trimolecularThresholdVal):
                                         trimolecularThreshold[i,j,k] = True
-            
+                                        filter_packets.append(((i,j,k),len(filter_times)-1))
             
             ###############################################################################
             # Movement from edge to core or surface processing and interrupt determination#
@@ -997,8 +1030,9 @@ cdef class ReactionSystem(DASx):
                     if RR > toleranceInterruptSimulation:
                         logging.info('At time {0:10.4e} s, species {1} at {2} exceeded the minimum rate for simulation interruption of {3}'.format(self.t, obj, RR, toleranceInterruptSimulation))
                         interrupt = True
-                
-                
+                    if RR > toleranceFilterInterrupt and not filter_resolved:
+                        logging.info('At time {0:10.4e} s, species {1} at {2} exceeded the minimum rate for stopping filter operations of {3}'.format(self.t, obj, RR, toleranceFilterInterrupt))
+                        resolve_filter = True
                 sortedInds = numpy.argsort(numpy.array(tempNewObjectVals)).tolist()[::-1]
                 
                 newObjects.extend([tempNewObjects[q] for q in sortedInds])
@@ -1066,7 +1100,53 @@ cdef class ReactionSystem(DASx):
                 tempNewObjects = []
                 tempNewObjectInds = []
                 tempNewObjectVals = []
+                
+            ###################
+            #Filter resolution#
+            ###################
             
+            if not filter_resolved and len(filter_times) > 0 and resolve_filter: 
+                logging.error('Resolving filtering...')
+                filter_resolved = True #note that the times, conversions and RRs have already been logged this iteration
+                term_conversions = [term.conversion for term in self.termination if isinstance(term,TerminationConversion)]
+                term_time = [term.time.value_si for term in self.termination if isinstance(term,TerminationTime)]
+                term_RR = [term.ratio for term in self.termination if isinstance(term,TerminationRateRatio)]
+                
+                if term_conversions:
+                    fconv = []
+                    for i in xrange(len(term_conversions)):
+                        fconv.append(term_conversions[i]*(1.0-(1.0-filter_conversions[-1][i]/term_conversions[i])**filterLagIndex))
+                if term_time:
+                    ftime = term_time[0]*(1.0-(1.0-filter_times[-1]/term_time[0])**filterLagIndex)
+                
+                if term_RR:
+                    
+                    pre = False
+                    for i,time in enumerate(filter_times):
+                        if time > max_RR_t:
+                            RR_ind = i
+                            break
+                    else:
+                        pre = True
+                        RR_ind = len(filter_times) - 1
+                    
+                    
+                    fRRpre = RR0*(filter_RRs[RR_ind]/RR0)**filterRRPreMaxLagIndex
+                    
+                    if not pre:
+                        RRt = term_RR*maxCharRate
+                        fRRpost = RRt/(1.0-(1.0-RRt/charRate)**filterRRPostMaxLagIndex)
+                
+                for packet in filter_packets: #unfiltering things that were done after the lag
+                    i = packet[1]
+                    if (ftime and filter_times[i] > ftime) or (fconv and any([filter_conversions[i][j] > fconv[j] for j in xrange(len(term_conversions))])) or (term_RR and (i < RR_ind and filter_RRs[i] > fRRpre)) or (term_RR and not pre and (i > RR_ind and filter_RRs[i] < fRRpost)):
+                            if len(packet[0]) == 1:
+                                unimolecularThreshold[packet[0]] = False
+                            elif len(packet[0]) == 2:
+                                bimolecularThreshold[packet[0]] = False
+                            elif len(packet[0]) == 3:
+                                trimolecularThreshold[packet[0]] = False
+
             ###########################
             #Overall Object Processing#
             ###########################
