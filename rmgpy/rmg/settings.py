@@ -54,6 +54,9 @@ This module contains settings classes for manipulation of RMG run parameters
     `maxNumObjPerIter`                              Maximum number of objects that can be sent for enlargement from a single simulation
     `edgeCheckFrequency`                            Fraction of solver time steps at which the edge reaction rates will be calculated and checked
     `filterLagIndex`                                Index that defines how much the filter lags behind the 
+    `filterRRPreMaxLagIndex`                        Index that defines filter lag relative to the initial rate ratio when the maximum rate ratio has not occurred yet
+    `filterRRPostMaxLagIndex`                       Index that defines filter lag relative to the termination rate ratio when the maximum rate ratio has occurred
+    `toleranceFilterInterrupt`                      The relative species flux that lag is defined behind once it is violated
 ==================================================================================================================================================
 """
 import numpy
@@ -68,7 +71,7 @@ class ModelSettings(object):
           toleranceMoveEdgeReactionToSurfaceInterrupt=None,toleranceMoveEdgeReactionToCoreInterrupt=None, maximumEdgeSpecies=1000000, minCoreSizeForPrune=50, 
           minSpeciesExistIterationsForPrune=2, filterReactions=False, filterThreshold=1e8, ignoreOverallFluxCriterion=False, maxNumSpecies=None, maxNumObjsPerIter=1,
           terminateAtMaxObjects=False,toleranceThermoKeepSpeciesInEdge=numpy.inf,dynamicsTimeScale = Quantity((0.0,'sec')), edgeCheckFrequency=1.0,
-          filterLagIndex=1.0):
+          filterLagIndex=1.0,filterRRPreMaxLagIndex = 1.0, filterRRPostMaxLagIndex = 1.0, toleranceFilterInterrupt = None):
         
         self.fluxToleranceKeepInEdge = toleranceKeepInEdge
         self.fluxToleranceMoveToCore = toleranceMoveToCore
@@ -88,11 +91,18 @@ class ModelSettings(object):
         self.dynamicsTimeScale = dynamicsTimeScale.value_si
         self.edgeCheckFrequency = edgeCheckFrequency
         self.filterLagIndex = filterLagIndex
+        self.filterRRPreMaxLagIndex = filterRRPreMaxLagIndex
+        self.filterRRPostMaxLagIndex = filterRRPostMaxLagIndex
         
         if toleranceInterruptSimulation:
             self.fluxToleranceInterrupt = toleranceInterruptSimulation
         else:
             self.fluxToleranceInterrupt = toleranceMoveToCore
+        
+        if toleranceFilterInterrupt is None:
+            self.toleranceFilterInterrupt = toleranceMoveToCore
+        else:
+            self.toleranceFilterInterrupt = toleranceFilterInterrupt
             
         if toleranceMoveEdgeReactionToSurfaceInterrupt:
             self.toleranceMoveEdgeReactionToSurfaceInterrupt = toleranceMoveEdgeReactionToSurfaceInterrupt

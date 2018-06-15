@@ -316,7 +316,7 @@ def model(toleranceMoveToCore=None, toleranceMoveEdgeReactionToCore=numpy.inf,to
           toleranceMoveEdgeReactionToCoreInterrupt=None, maximumEdgeSpecies=1000000, minCoreSizeForPrune=50, 
           minSpeciesExistIterationsForPrune=2, filterReactions=False, filterThreshold=1e8, ignoreOverallFluxCriterion=False,
           maxNumSpecies=None,maxNumObjsPerIter=1,terminateAtMaxObjects=False,toleranceThermoKeepSpeciesInEdge=numpy.inf,dynamicsTimeScale=(0.0,'sec'),
-          edgeCheckFrequency=1.0, filterLagIndex=1.0):
+          edgeCheckFrequency=1.0, filterLagIndex=1.0, filterRRPreMaxLagIndex=1.0, filterRRPostMaxLagIndex=1.0, toleranceFilterInterrupt=None):
     """
     How to generate the model. `toleranceMoveToCore` must be specified. 
     toleranceMoveReactionToCore and toleranceReactionInterruptSimulation refers to an additional criterion for forcing an edge reaction to be included in the core
@@ -330,6 +330,9 @@ def model(toleranceMoveToCore=None, toleranceMoveEdgeReactionToCore=numpy.inf,to
     if toleranceMoveToCore > toleranceInterruptSimulation:
         raise InputError("toleranceMoveToCore must be less than or equal to toleranceInterruptSimulation, which is currently {0}".format(toleranceInterruptSimulation))
     
+    if toleranceFilterInterrupt is None:
+        toleranceFilterInterrupt = toleranceMoveToCore
+        
     rmg.modelSettingsList.append(
         ModelSettings(
             toleranceMoveToCore=toleranceMoveToCore,
@@ -354,6 +357,9 @@ def model(toleranceMoveToCore=None, toleranceMoveEdgeReactionToCore=numpy.inf,to
             dynamicsTimeScale=Quantity(dynamicsTimeScale),
             edgeCheckFrequency=edgeCheckFrequency,
             filterLagIndex = filterLagIndex,
+            filterRRPreMaxLagIndex = filterRRPreMaxLagIndex,
+            filterRRPostMaxLagIndex = filterRRPostMaxLagIndex,
+            toleranceFilterInterrupt = toleranceFilterInterrupt,
         )
     )
 
