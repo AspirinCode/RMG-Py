@@ -263,7 +263,7 @@ def find_allyl_delocalization_paths(atom1):
     return paths
 
 
-def find_lone_pair_radical_delocalization_paths(atom1):
+def find_adj_lone_pair_radical_delocalization_paths(atom1):
     """
     Find all the delocalization paths of lone electron pairs next to the radical center indicated
     by `atom1`. Used to generate resonance isomers in adjacent N/O/S atoms.
@@ -304,7 +304,7 @@ def find_lone_pair_radical_delocalization_paths(atom1):
     return paths
 
 
-def find_lone_pair_multiple_bond_delocalization_paths(atom1):
+def find_adj_lone_pair_multiple_bond_delocalization_paths(atom1):
     """
     Find all the delocalization paths of a N/O/S atom1 which either:
     - Has a lonePair and is bonded by a single/double bond (e.g., [::NH-]-[CH2+], [::N-]=[CH+]) -- direction 1
@@ -339,7 +339,7 @@ def find_lone_pair_multiple_bond_delocalization_paths(atom1):
     return paths
 
 
-def find_lone_pair_radical_multiple_bond_delocalization_paths(atom1):
+def find_adj_lone_pair_radical_multiple_bond_delocalization_paths(atom1):
     """
     Find all the delocalization paths of a N/O/S atom1 which either:
     - Has a lonePair and is bonded by a single/double bond to a radical atom (e.g., [::N]-[.CH2])
