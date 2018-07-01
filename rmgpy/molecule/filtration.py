@@ -36,8 +36,8 @@ The rules this module follows are (by order of importance):
 1. Minimum overall deviation from the Octet Rule (elaborated for Dectet and Duodectet for hypervalance heteroatoms)
 2. Additional charge separation is only important for radicals and if it makes a new radical site in the species
 3. If a structure must have charge separation, negative charges will be assigned to more electronegative atoms, whereas
-   positive charges will be assigned to less electronegative atoms
-4. Opposite charges will be as close as possible to one another, and vice versa
+   positive charges will be assigned to less electronegative atoms (charge stabilization)
+4. Opposite charges will be as close as possible to one another, and vice versa (charge stabilization)
 
 (inspired by http://www.chem.ucla.edu/~harding/tutorials/resonance/imp_res_str.html)
 """
@@ -149,7 +149,7 @@ def get_octet_deviation(mol):
 
 def octet_filtration(mol_list, octet_deviation_list):
     """
-    Returns the a filtered list based on the octet_deviation_list. Also computes and returns a charge_span_list.
+    Returns a filtered list based on the octet_deviation_list. Also computes and returns a charge_span_list.
     Filtering using the octet deviation criterion rules out most unrepresentative structures. However, since some
     charge-strained species are still kept (e.g., [NH]N=S=O <-> [NH+]#[N+][S-][O-]), we also generate during the same
     loop a charge_span_list to keep track of the charge spans. This is used for further filtering.
@@ -182,41 +182,56 @@ def charge_filtration(filtered_list, charge_span_list):
     If a structure must have charge separation, negative charges will be assigned to more electronegative atoms, whereas
     positive charges will be assigned to less electronegative atoms. Also, opposite charges will be as close as possible
     to one another, and vice versa.
-    If the species is a radical, we first check whether keeping an extra charge span separation might be important for
-    reactivity by relocating the radical site. If so, we keep these structures.
+    If the species is a radical or has multiple bonds, we first check whether keeping an extra charge span separation
+    layer might be important for reactivity (i.e., relocates the radical or multiple bond site). If so, we keep the
+    structures in the extra charge span separation layer.
     For example:
     - Both of NO2's resonance structures will be kept: [O]N=O <=> O=[N+.][O-]
     - NCO will only have two resonance structures [N.]=C=O <=> N#C[O.], and will loose the third structure which has
       the same octet deviation, has a charge separation, but the radical site has already been considered: [N+.]#C[O-]
     - CH2NO keeps all three structures, since a new radical site is introduced: [CH2.]N=O <=> C=N[O.] <=> C=[N+.][O-]
-    However, if the species is not a radical we only keep the structures with the minimal charge span.
-    For example:
-    - NSH will only keep N#S and not [N-]=[SH+]
+    - aniline (Nc1ccccc1) keeps the charged carbene structures due to the change in multiple bond location, but these
+      charged structures are then popped due to violation of the electronegativity rule.
+    - Azide is know to have three resonance structures: [NH-][N+]#N <=> N=[N+]=[N-] <=> [NH+]#[N+][N-2];
+      here we keep the third one with the larger charge span since it introduces a triple bond in a new location.
+    However, if the species is not a radical, or multiple bonds do not alter, we only keep the structures with the
+    minimal charge span. For example:
+    - NSH will only keep the N#S form and not [N-]=[SH+]
     - The following species will loose two thirds of its resonance structures, which are charged: CS(=O)SC <=>
       CS(=O)#SC <=> C[S+]([O-]SC <=> CS([O-])=[S+]C <=> C[S+]([O-])#SC <=> C[S+](=O)=[S-]C
-    - The azide structure is know to have three resonance structures: [NH-][N+]#N <=> N=[N+]=[N-] <=> [NH+]#[N+][N-2];
-      here we'll lose the third one, which is theoretically "true", but doesn't contribute to reactivity.
     """
     min_charge_span = min(charge_span_list)
     if len(set(charge_span_list)) > 1:
-        # Proceed only if there are structures with different charge spans and the species is a radical.
-        if filtered_list[0].isRadical():
+        # Proceed if there are structures with different charge spans and the species is a radical or has lone pairs
+        # (only species with lone pairs in their localized structures are considered for multiple bond relocation)
+        if filtered_list[0].isRadical() or any([structure.has_lone_pairs() for structure in filtered_list]):
             charged_list = [filtered_mol for index, filtered_mol in enumerate(filtered_list) if
                             charge_span_list[index] == min_charge_span + 1]  # save the 2nd charge span layer
             filtered_list = [filtered_mol for index, filtered_mol in enumerate(filtered_list) if
                             charge_span_list[index] == min_charge_span]  # keep at least one charge span layer
-            # Find the radical sites in all filtered_list structures:
-            sorting_list = []
+            # Find the radical and lone pair sites in all filtered_list structures:
+            rad_sorting_list = []  # sortingLabels for radical sites
+            mb_sorting_list = []  # tuples (atom1.sortingLabel, atom2.sortingLabel, bond_order) tracking multiple bonds
             for mol in filtered_list:
                 for atom in mol.vertices:
                     if atom.radicalElectrons:
-                        sorting_list.append(int(atom.sortingLabel))
-            # Find unique radical sites in charged_list and append these structures to filtered_list:
+                        rad_sorting_list.append(int(atom.sortingLabel))
+                    bonds_dict = mol.getBonds(atom)
+                    for atom2, bond in bonds_dict.iteritems():
+                        if bond.getOrderNum() >= 2:
+                            mb_sorting_list.append((atom.sortingLabel, atom2.sortingLabel, bond.getOrderNum()))
+
+            # Find unique radical sites and multiple bonds in charged_list and append to unique_charged_list:
             unique_charged_list = []
             for mol in charged_list:
                 for atom in mol.vertices:
-                    if atom.radicalElectrons and int(atom.sortingLabel) not in sorting_list:
+                    if atom.radicalElectrons and int(atom.sortingLabel) not in rad_sorting_list:
                         unique_charged_list.append(mol)
+                    bonds_dict = mol.getBonds(atom)
+                    for atom2, bond in bonds_dict.iteritems():
+                        tup = (atom.sortingLabel, atom2.sortingLabel, bond.getOrderNum())
+                        if bond.getOrderNum() >= 2 and tup not in mb_sorting_list and mol not in unique_charged_list:
+                            unique_charged_list.append(mol)
 
             if unique_charged_list:
                 # only keep structures that obey the electronegativity and the charge proximity rules
@@ -226,9 +241,11 @@ def charge_filtration(filtered_list, charge_span_list):
                     electroneg_positively_charged_atoms = electroneg_negatively_charged_atoms = 0
                     for atom in mol.vertices:
                         if atom.charge > 0:
-                            electroneg_positively_charged_atoms += PeriodicSystem.electronegativity[atom.symbol]
+                            electroneg_positively_charged_atoms +=\
+                                PeriodicSystem.electronegativity[atom.symbol] * abs(atom.charge)
                         elif atom.charge < 0:
-                            electroneg_negatively_charged_atoms += PeriodicSystem.electronegativity[atom.symbol]
+                            electroneg_negatively_charged_atoms +=\
+                                PeriodicSystem.electronegativity[atom.symbol] * abs(atom.charge)
                     if electroneg_positively_charged_atoms > electroneg_negatively_charged_atoms:
                         # This condition is NOT hermetic: It is possible to think of a situation where one structure has
                         # several pairs of formally charged atoms, where one of the pairs isn't obeying the
@@ -270,11 +287,11 @@ def charge_filtration(filtered_list, charge_span_list):
                         unique_charged_list.pop(i)
 
                 # append unique_charged_list to filtered_list
-                filtered_list += unique_charged_list
+                filtered_list.extend(unique_charged_list)
 
         else:
-            # There are structures with different charge spans, but the species is not a radical.
-            # Additional charge span levels are removed
+            # There are structures with different charge spans, but the species is not a radical,
+            # nor does it have lone pairs. Additional charge span levels are removed
             filtered_list = [filtered for index, filtered in enumerate(filtered_list) if
                              charge_span_list[index] == min_charge_span]
 
