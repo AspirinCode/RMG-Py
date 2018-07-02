@@ -144,10 +144,9 @@ class ResonanceTest(unittest.TestCase):
         """Test resonance structure generation for ethyl azide
 
         Simple case for N5ddc <=> N5tc resonance
-        Azides are described by three resonance structures: N=[N+]=[N-] <=> [NH-][N+]#N <=> [NH+]#[N+][N-2]
-        However, since the third does not contribute to reactivity and has a higher charge span, it is filtered out"""
+        Azides are described by three resonance structures: N=[N+]=[N-] <=> [NH-][N+]#N <=> [NH+]#[N+][N-2]"""
         molList = generate_resonance_structures(Molecule(SMILES="CCN=[N+]=[N-]"))
-        self.assertEqual(len(molList), 2)
+        self.assertEqual(len(molList), 3)
         self.assertTrue(all([any([atom.charge != 0 for atom in mol.vertices]) for mol in molList]))
 
     def test_ozone(self):
@@ -206,10 +205,10 @@ class ResonanceTest(unittest.TestCase):
     def testN5dc(self):
         """Test the N5dc resonance transformation
 
-        We should see N[N+]([O-])=O <=> N[N+](=O)[O-], which are isomorphic"""
+        We should see N[N+]([O-])=O <=> N[N+](=O)[O-], which are isomorphic, plus [O-][N+](=[NH2+])[O-]"""
         mol = Molecule(SMILES="N[N+]([O-])=O")
         mol_list = generate_resonance_structures(mol, keep_isomorphic=True)
-        self.assertEqual(len(mol_list), 2)
+        self.assertEqual(len(mol_list), 3)
         isomorphic_counter = 0
         for mol1 in mol_list:
             if mol1.isIsomorphic(mol):
@@ -266,7 +265,7 @@ class ResonanceTest(unittest.TestCase):
     def testAromaticWithNResonance(self):
         """Test resonance structure generation for aromatic species with N5ddc <=> N5tc resonance"""
         molList = generate_resonance_structures(Molecule(SMILES="c1ccccc1CCN=[N+]=[N-]"))
-        self.assertEqual(len(molList), 4)
+        self.assertEqual(len(molList), 6)
         # TODO: this test cannot be run because RDKit (which checks for aromaticity) cannot process hyper-valence N
 
     def testNoClarStructures(self):
