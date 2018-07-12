@@ -29,7 +29,7 @@
 ###############################################################################
 
 """
-This module contains functionality for parsing CanTherm input files.
+This module contains functionality for parsing ARKANE input files.
 """
 
 import os.path
@@ -61,10 +61,10 @@ from rmgpy.molecule import Molecule
 from rmgpy.reaction import Reaction
 from rmgpy.transport import TransportData
 
-from rmgpy.cantherm.kinetics import KineticsJob
-from rmgpy.cantherm.statmech import StatMechJob, assign_frequency_scale_factor
-from rmgpy.cantherm.thermo import ThermoJob
-from rmgpy.cantherm.pdep import PressureDependenceJob
+from rmgpy.arkane.kinetics import KineticsJob
+from rmgpy.arkane.statmech import StatMechJob, assign_frequency_scale_factor
+from rmgpy.arkane.thermo import ThermoJob
+from rmgpy.arkane.pdep import PressureDependenceJob
 
 ################################################################################
 
@@ -328,7 +328,7 @@ def InChI(inchi):
 
 def loadInputFile(path):
     """
-    Load the CanTherm input file located at `path` on disk, and return a list of
+    Load the ARKANE input file located at `path` on disk, and return a list of
     the jobs defined in that file.
     """
     global speciesDict, transitionStateDict, reactionDict, networkDict, jobList

@@ -29,8 +29,8 @@
 ###############################################################################
 
 """
-This module contains the :class:`CanTherm` class, the main class used to run
-CanTherm.
+This module contains the :class:`ARKANE` class, the main class used to run
+ARKANE.
 """
 
 import os
@@ -47,18 +47,18 @@ except ImportError:
 
 from rmgpy.chemkin import writeElementsSection, writeThermoEntry, writeKineticsEntry
 
-from rmgpy.cantherm.input import loadInputFile
+from rmgpy.arkane.input import loadInputFile
 
-from rmgpy.cantherm.kinetics import KineticsJob
-from rmgpy.cantherm.statmech import StatMechJob
-from rmgpy.cantherm.thermo import ThermoJob
-from rmgpy.cantherm.pdep import PressureDependenceJob
+from rmgpy.arkane.kinetics import KineticsJob
+from rmgpy.arkane.statmech import StatMechJob
+from rmgpy.arkane.thermo import ThermoJob
+from rmgpy.arkane.pdep import PressureDependenceJob
 
 ################################################################################
 
-class CanTherm:
+class ARKANE:
     """
-    The :class:`CanTherm` class represents an instance of CanTherm, a tool for
+    The :class:`ARKANE` class represents an instance of ARKANE, a tool for
     computing properties of chemical species and reactions. The attributes are:
     
     =================== ========================================================
@@ -88,14 +88,14 @@ class CanTherm:
     
     def parseCommandLineArguments(self):
         """
-        Parse the command-line arguments being passed to CanTherm. This uses the
+        Parse the command-line arguments being passed to ARKANE. This uses the
         :mod:`argparse` module, which ensures that the command-line arguments are
         sensible, parses them, and returns them.
         """
     
         parser = argparse.ArgumentParser(description=
         """
-        CanTherm is a Python toolkit for computing chemical reaction rates and other
+        ARKANE is a Python toolkit for computing chemical reaction rates and other
         properties used in detailed kinetics models using various methodologies
         and theories.
         """)
@@ -138,7 +138,7 @@ class CanTherm:
     
     def initializeLog(self, verbose=logging.INFO, logFile=None):
         """
-        Set up a logger for CanTherm to use to print output to stdout. The
+        Set up a logger for ARKANE to use to print output to stdout. The
         `verbose` parameter is an integer specifying the amount of log text seen
         at the console; the levels correspond to those of the :data:`logging` module.
         """
@@ -176,23 +176,23 @@ class CanTherm:
     
     def logHeader(self, level=logging.INFO):
         """
-        Output a header containing identifying information about CanTherm to the log.
+        Output a header containing identifying information about ARKANE to the log.
         """
         from rmgpy import __version__
-        logging.log(level, 'CanTherm execution initiated at {0}'.format(time.asctime()))
+        logging.log(level, 'ARKANE execution initiated at {0}'.format(time.asctime()))
         logging.log(level, '')
     
-        logging.log(level, '###############################################################')
-        logging.log(level, '#                                                             #')
-        logging.log(level, '#                          CanTherm                           #')
-        logging.log(level, '#                                                             #')
-        logging.log(level, '#   Version: {0:48s} #'.format(__version__))
-        logging.log(level, '#   Authors: RMG Developers (rmg_dev@mit.edu)                 #')
-        logging.log(level, '#   P.I.s:   William H. Green (whgreen@mit.edu)               #')
-        logging.log(level, '#            Richard H. West (r.west@neu.edu)                 #')
-        logging.log(level, '#   Website: http://reactionmechanismgenerator.github.io/     #')
-        logging.log(level, '#                                                             #')
-        logging.log(level, '###############################################################')
+        logging.log(level, '################################################################')
+        logging.log(level, '#                                                              #')
+        logging.log(level, '# Automated Reaction Kinetics and Network Exploration (ARKANE) #')
+        logging.log(level, '#                                                              #')
+        logging.log(level, '#   Version: {0:49s} #'.format(__version__))
+        logging.log(level, '#   Authors: RMG Developers (rmg_dev@mit.edu)                  #')
+        logging.log(level, '#   P.I.s:   William H. Green (whgreen@mit.edu)                #')
+        logging.log(level, '#            Richard H. West (r.west@neu.edu)                  #')
+        logging.log(level, '#   Website: http://reactionmechanismgenerator.github.io/      #')
+        logging.log(level, '#                                                              #')
+        logging.log(level, '################################################################')
         logging.log(level, '')
     
     def logFooter(self, level=logging.INFO):
@@ -200,7 +200,7 @@ class CanTherm:
         Output a footer to the log.
         """
         logging.log(level, '')
-        logging.log(level, 'CanTherm execution terminated at {0}'.format(time.asctime()))
+        logging.log(level, 'ARKANE execution terminated at {0}'.format(time.asctime()))
 
     def loadInputFile(self, inputFile):
         """
@@ -220,7 +220,7 @@ class CanTherm:
         
         # Initialize the logging system (both to the console and to a file in the
         # output directory)
-        self.initializeLog(self.verbose, os.path.join(self.outputDirectory, 'cantherm.log'))
+        self.initializeLog(self.verbose, os.path.join(self.outputDirectory, 'ARKANE.log'))
         
         # Print some information to the beginning of the log
         self.logHeader()

@@ -33,14 +33,14 @@ import numpy
 import logging
 import os.path
 import rmgpy.constants as constants
-from rmgpy.cantherm.common import checkConformerEnergy
+from rmgpy.arkane.common import checkConformerEnergy
 from rmgpy.statmech import IdealGasTranslation, NonlinearRotor, LinearRotor, HarmonicOscillator, Conformer
 ################################################################################
 class QchemLog:
     """
     Represent an output file from Qchem. The attribute `path` refers to the
     location on disk of the Qchem output file of interest. Methods are provided
-    to extract a variety of information into CanTherm classes and/or NumPy
+    to extract a variety of information into ARKANE classes and/or NumPy
     arrays.
     """    
 

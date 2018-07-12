@@ -4,10 +4,10 @@ title = 'methoxy decomposition to H + CH2O'
 description = \
 frequencyScaleFactor = 1.0
 """
-This example illustrates how to manually set up a CanTherm input file for a small P-dep reaction system [using only the
+This example illustrates how to manually set up an ARKANE input file for a small P-dep reaction system [using only the
 RRHO assumption, and without tunneling, although this can be easily implemented]. Such a calculation is desireable if the user 
 wishes to supply experimentally determined freqeuncies, for example. Althgou some coommented notes below may be useful, 
-see http://reactionmechanismgenerator.github.io/RMG-Py/users/cantherm/index.html for more documented information about CanTherm and 
+see http://reactionmechanismgenerator.github.io/RMG-Py/users/arkane/index.html for more documented information about ARKANE and 
 creating input files. (information pertaining this file is adopted by Dames and Golden, 2013, JPCA 117 (33) 7686-96.)
 """
 transitionState(
@@ -219,6 +219,6 @@ pressureDependence(
     #Other methods include: 'reservoir state', 'chemically-significant eigenvalues', 
     interpolationModel = ('pdeparrhenius'), 
     activeKRotor = True,
-#    activeJRotor = False, #causes cantherm to crash
+#    activeJRotor = False,  # causes ARKANE to crash
     rmgmode = False, 
 )
