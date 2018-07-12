@@ -3,12 +3,14 @@ title = 'methoxy decomposition to H + CH2O'
 
 description = \
 """
-This example illustrates how to manually set up a CanTherm input file for a small P-dep reaction system [using only the
-RRHO assumption, and without tunneling, although this can be easily implemented]. Such a calculation is desireable if the user 
-wishes to supply experimentally determined freqeuncies, for example. Althgou some coommented notes below may be useful, 
-see http://greengroup.github.io/RMG-Py/users/cantherm/index.html for more documented information about CanTherm and 
-creating input files. (information pertaining this file is adopted by Dames and Golden, 2013, JPCA 117 (33) 7686-96.)
+This example illustrates how to manually set up an ARKANE input file for a small P-dep reaction system (using only the
+RRHO assumption, and without tunneling, although this can be easily implemented). Such a calculation is desirable if
+the user wishes to supply experimentally determined frequencies, for example. Although some commented notes below may
+be useful, see http://greengroup.github.io/RMG-Py/users/arkane/index.html for more documented information about
+ARKANE and creating input files.
+(information pertaining this file is adopted by Dames and Golden, 2013, JPCA 117 (33) 7686-96.)
 """
+
 transitionState(
     label = 'TS3',
     E0 = (34.1,'kcal/mol'),  # this INCLUDES the ZPE. Note that other energy units are also possible (e.g., kJ/mol)
@@ -85,13 +87,13 @@ species(
 species(
     label = 'H',
     E0 = (0.000,'kcal/mol'),
-	molecularWeight = (1.00783,"g/mol"),
+    molecularWeight = (1.00783,"g/mol"),
     collisionModel = TransportData(sigma=(3.69e-10,'m'), epsilon=(4.0,'kJ/mol')),
     energyTransferModel = SingleExponentialDown(alpha0=(0.956,'kJ/mol'), T0=(300,'K'), n=0.95),
     modes = [
         IdealGasTranslation(mass=(1.00783,"g/mol")),
     ],
-	spinMultiplicity = 2, 
+    spinMultiplicity = 2,
     opticalIsomers = 1,
 
 )
@@ -131,7 +133,7 @@ species(
     modes = [
         HarmonicOscillator(frequencies=([418,595, 1055, 1198, 1368, 1488, 3138, 3279, 3840],'cm^-1')),
         # below is an example of how to include hindered rotors
-		#HinderedRotor(inertia=(5.75522e-47,'kg*m^2'), symmetry=1, barrier=(22427.8,'J/mol'), semiclassical=False),
+        #HinderedRotor(inertia=(5.75522e-47,'kg*m^2'), symmetry=1, barrier=(22427.8,'J/mol'), semiclassical=False),
         NonlinearRotor(rotationalConstant=([0.868,0.993,6.419],"cm^-1"),symmetry=1, quantum=False),
         IdealGasTranslation(mass=(31.01843,"g/mol")),
     ],
@@ -193,13 +195,13 @@ network(
     label = 'methoxy',
     isomers = [
         'methoxy',
-		'CH2OH',
+        'CH2OH',
     ],
 
     reactants = [
-	('CH2O','H'),
+    ('CH2O','H'),
 #        ('CH2Ob','Hb'),
-	],
+    ],
 
     bathGas = {
         'He': 1,
@@ -218,6 +220,6 @@ pressureDependence(
     #Other methods include: 'reservoir state', 'chemically-significant eigenvalues', 
     interpolationModel = ('pdeparrhenius'), 
     activeKRotor = True,
-#    activeJRotor = False, #causes cantherm to crash
+#    activeJRotor = False,  # causes ARKANE to crash
     rmgmode = False, 
 )
