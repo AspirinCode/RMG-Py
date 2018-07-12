@@ -150,6 +150,9 @@ class PressureDependenceJob(object):
         else:
             self.sensitivity_conditions = None
         
+        self.generateTemperatureList()
+        self.generatePressureList()
+        
     @property
     def Tmin(self):
         """The minimum temperature at which the computed k(T,P) values are valid, or ``None`` if not defined."""
